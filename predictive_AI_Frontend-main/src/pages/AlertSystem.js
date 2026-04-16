@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useLang } from '../LanguageContext';
 
 function AlertSystem({ userId }) {
+  const { t, lang } = useLang();
   const [assessments, setAssessments] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +21,6 @@ function AlertSystem({ userId }) {
   const [searchRadius, setSearchRadius] = useState(10000);
   const [facilityFilter, setFacilityFilter] = useState('all');
 
-  // Load data
   useEffect(() => {
     loadUserInfo();
     loadAssessments();
@@ -28,7 +29,6 @@ function AlertSystem({ userId }) {
     setSharedData(existing);
   }, [userId]);
 
-  // User info load
   const loadUserInfo = async () => {
     try {
       const response = await axios.get(`http://localhost:5000/api/user/${userId}`);
@@ -41,7 +41,6 @@ function AlertSystem({ userId }) {
     }
   };
 
-  // Assessments load
   const loadAssessments = async () => {
     setLoading(true);
     try {
@@ -57,7 +56,6 @@ function AlertSystem({ userId }) {
     setLoading(false);
   };
 
-  // GPS Location
   const getLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -76,7 +74,6 @@ function AlertSystem({ userId }) {
     }
   };
 
-  // Reverse Geocoding
   const getLocationName = async (lat, lng) => {
     try {
       const response = await fetch(
@@ -87,7 +84,6 @@ function AlertSystem({ userId }) {
     } catch (err) {}
   };
 
-  // Manual Location Search
   const searchByManualLocation = async () => {
     if (!manualLocation.trim()) return;
     setFacilityLoading(true);
@@ -106,7 +102,6 @@ function AlertSystem({ userId }) {
     setFacilityLoading(false);
   };
 
-  // Nearby facilities search
   const searchNearbyFacilities = async (lat, lng) => {
     setFacilityLoading(true);
     try {
@@ -162,7 +157,6 @@ function AlertSystem({ userId }) {
     setFacilityLoading(false);
   };
 
-  // Category detect
   const detectCategory = (name, tags) => {
     const n = (name || '').toLowerCase();
     const a = (tags?.amenity || '').toLowerCase();
@@ -180,7 +174,6 @@ function AlertSystem({ userId }) {
     return { type: 'other', label: 'Health Centre', color: '#6c757d', icon: '🏥' };
   };
 
-  // Distance
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -189,7 +182,6 @@ function AlertSystem({ userId }) {
     return Math.round(2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 100) / 100;
   };
 
-  // Generate Alerts
   const generateAlerts = (data) => {
     const alertList = [];
     const samList = data.filter(a => a.severity === 'SAM');
@@ -200,8 +192,8 @@ function AlertSystem({ userId }) {
       alertList.push({
         id: 'sam', type: 'CRITICAL', color: '#dc3545', icon: '🚨',
         title: 'CRITICAL: SAM Detected',
-        titleHi: 'गंभीर: SAM पाया गया - तुरंत अस्पताल जाएं',
-        message: 'Bachche ko turant NRC/Hospital le jaayein.',
+        titleHi: t('adv_sam'),
+        message: t('adv_sam'),
         autoShare: true, assessment: latest
       });
     }
@@ -210,8 +202,8 @@ function AlertSystem({ userId }) {
       alertList.push({
         id: 'sam_repeat', type: 'REPEAT_SAM', color: '#b71c1c', icon: '🆘',
         title: `REPEAT SAM: ${samList.length} times detected`,
-        titleHi: `${samList.length} बार SAM पाया गया - हालत गंभीर`,
-        message: 'Data auto-share ho raha hai.',
+        titleHi: `${samList.length} ${t('sev_sam')}`,
+        message: t('adv_sam'),
         autoShare: true
       });
     }
@@ -220,8 +212,8 @@ function AlertSystem({ userId }) {
       alertList.push({
         id: 'mam', type: 'WARNING', color: '#ff9800', icon: '⚠️',
         title: 'WARNING: MAM Detected',
-        titleHi: 'चेतावनी: MAM पाया गया - पोषण में सुधार करें',
-        message: 'Anganwadi/ICDS se sampark karein.',
+        titleHi: t('adv_mam'),
+        message: t('adv_mam'),
         autoShare: false, assessment: latest
       });
     }
@@ -230,8 +222,8 @@ function AlertSystem({ userId }) {
       alertList.push({
         id: 'mam_repeat', type: 'REPEAT_MAM', color: '#e65100', icon: '🔔',
         title: `REPEAT MAM: ${mamList.length} times detected`,
-        titleHi: `${mamList.length} बार MAM - Doctor se milein`,
-        message: 'Improvement nahi ho raha.',
+        titleHi: `${mamList.length} ${t('sev_mam')}`,
+        message: t('adv_mam'),
         autoShare: false
       });
     }
@@ -241,8 +233,8 @@ function AlertSystem({ userId }) {
       alertList.push({
         id: 'edema', type: 'EDEMA', color: '#9c27b0', icon: '💧',
         title: 'EDEMA Detected',
-        titleHi: 'एडीमा (सूजन) पाया गया - SAM का लक्षण',
-        message: 'Turant medical help lein.',
+        titleHi: t('de_edema_yes'),
+        message: t('adv_sam'),
         autoShare: true
       });
     }
@@ -250,22 +242,20 @@ function AlertSystem({ userId }) {
     if (latest?.severity === 'NORMAL' && alertList.length === 0) {
       alertList.push({
         id: 'normal', type: 'NORMAL', color: '#4caf50', icon: '✅',
-        title: 'All Normal',
-        titleHi: 'सब सामान्य - बच्चा स्वस्थ है',
-        message: 'Poshan jaari rakhein.',
+        title: t('alert_all_clear'),
+        titleHi: t('alert_all_clear'),
+        message: t('adv_normal'),
         autoShare: false
       });
     }
 
     setAlerts(alertList);
 
-    // Auto SMS on SAM/MAM
     if (latest && (latest.severity === 'SAM' || latest.severity === 'MAM')) {
       autoSendSMS(latest);
     }
   };
 
-  // Auto SMS to registered number
   const autoSendSMS = (assessment) => {
     const phone = userInfo?.phone || smsNumber;
     if (!phone) return;
@@ -277,20 +267,17 @@ function AlertSystem({ userId }) {
 
     const msg = `ALERT: Child Malnutrition\nSeverity: ${assessment.severity}\nHeight: ${assessment.height}cm\nWeight: ${assessment.weight}kg\nMUAC: ${assessment.muac}cm\nAction: ${assessment.severity === 'SAM' ? 'Turant hospital jaayein' : 'Poshan sudharein'}\nLocation: ${userLocation ? `maps.google.com/?q=${userLocation.lat},${userLocation.lng}` : 'N/A'}`;
 
-    // Try to open SMS app
     try {
       window.open(`sms:${phone}?body=${encodeURIComponent(msg)}`, '_self');
     } catch (err) {}
   };
 
-  // Manual SMS
   const sendSMS = (number, assessment) => {
     if (!number || !assessment) return;
     const msg = `ALERT: Child Malnutrition\nSeverity: ${assessment.severity}\nHeight: ${assessment.height}cm\nWeight: ${assessment.weight}kg\nMUAC: ${assessment.muac}cm\nBMI: ${assessment.bmi}\nEdema: ${assessment.edema}\nLocation: ${userLocation ? `maps.google.com/?q=${userLocation.lat},${userLocation.lng}` : 'N/A'}`;
     window.open(`sms:${number}?body=${encodeURIComponent(msg)}`, '_self');
   };
 
-  // WhatsApp share
   const shareWhatsApp = (number, assessment) => {
     if (!assessment) return;
     const msg = `*ALERT: Child Malnutrition*\n\n*Severity:* ${assessment.severity}\n*Height:* ${assessment.height} cm\n*Weight:* ${assessment.weight} kg\n*MUAC:* ${assessment.muac} cm\n*BMI:* ${assessment.bmi}\n*Edema:* ${assessment.edema}\n\n*Location:* ${userLocation ? `https://maps.google.com/?q=${userLocation.lat},${userLocation.lng}` : 'N/A'}\n\nPlease take action.`;
@@ -298,7 +285,6 @@ function AlertSystem({ userId }) {
     window.open(url, '_blank');
   };
 
-  // Share to facility
   const shareToFacility = (facility) => {
     const latest = assessments[0];
     if (!latest) return;
@@ -321,13 +307,12 @@ function AlertSystem({ userId }) {
     alert(`Data shared with ${facility.name}\nSeverity: ${latest.severity}\nAlso sending SMS...`);
   };
 
-  // Diet Plans
   const getDietPlan = (severity) => {
     if (severity === 'SAM') {
       return {
         urban: {
           title: 'SAM - Urban Diet Plan',
-          titleHi: 'SAM - शहरी डाइट प्लान',
+          titleHi: `SAM - ${t('diet_urban')} ${t('diet_title')}`,
           meals: [
             { time: 'सुबह 7:00', meal: 'दूध + केला + अंडा', mealEn: 'Milk + Banana + Egg' },
             { time: 'सुबह 10:00', meal: 'F-100 (Therapeutic milk)', mealEn: 'F-100 Therapeutic Milk' },
@@ -346,7 +331,7 @@ function AlertSystem({ userId }) {
         },
         rural: {
           title: 'SAM - Rural/Village Diet Plan',
-          titleHi: 'SAM - ग्रामीण/गाँव डाइट प्लान',
+          titleHi: `SAM - ${t('diet_rural')} ${t('diet_title')}`,
           meals: [
             { time: 'सुबह 7:00', meal: 'दूध + गुड़ + सत्तू', mealEn: 'Milk + Jaggery + Sattu' },
             { time: 'सुबह 10:00', meal: 'मूंगफली + गुड़ के लड्डू', mealEn: 'Peanut + Jaggery Laddu' },
@@ -369,7 +354,7 @@ function AlertSystem({ userId }) {
       return {
         urban: {
           title: 'MAM - Urban Diet Plan',
-          titleHi: 'MAM - शहरी डाइट प्लान',
+          titleHi: `MAM - ${t('diet_urban')} ${t('diet_title')}`,
           meals: [
             { time: 'सुबह 7:00', meal: 'दूध + दलिया + फल', mealEn: 'Milk + Porridge + Fruit' },
             { time: 'सुबह 10:00', meal: 'अंडा/पनीर + ब्रेड', mealEn: 'Egg/Paneer + Bread' },
@@ -386,7 +371,7 @@ function AlertSystem({ userId }) {
         },
         rural: {
           title: 'MAM - Rural/Village Diet Plan',
-          titleHi: 'MAM - ग्रामीण/गाँव डाइट प्लान',
+          titleHi: `MAM - ${t('diet_rural')} ${t('diet_title')}`,
           meals: [
             { time: 'सुबह 7:00', meal: 'दूध + रोटी + गुड़', mealEn: 'Milk + Roti + Jaggery' },
             { time: 'सुबह 10:00', meal: 'सत्तू + गुड़', mealEn: 'Sattu + Jaggery' },
@@ -406,7 +391,6 @@ function AlertSystem({ userId }) {
     return null;
   };
 
-  // Filtered facilities
   const getFilteredFacilities = () => {
     if (facilityFilter === 'all') return nearbyFacilities;
     return nearbyFacilities.filter(f => f.type === facilityFilter);
@@ -428,16 +412,16 @@ function AlertSystem({ userId }) {
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '50px' }}>
-        <p style={{ fontSize: '18px', color: '#667eea' }}>Loading...</p>
+        <p style={{ fontSize: '18px', color: '#667eea' }}>⏳ {t('loading')}</p>
       </div>
     );
   }
 
   return (
     <div style={{ padding: '10px' }}>
-      <h2 style={{ color: '#667eea', marginBottom: '5px' }}>Alert and Action Centre</h2>
+      <h2 style={{ color: '#667eea', marginBottom: '5px' }}>{t('alert_title')}</h2>
       <p style={{ color: '#666', fontSize: '14px', marginBottom: '20px' }}>
-        Alerts + Diet Plan + Hospital/Anganwadi + SMS - Sab ek jagah
+        {t('nav_alerts')} + {t('nav_diet')} + {t('nav_hospital')} + SMS
       </p>
 
       {/* ===== SECTION 1: EMERGENCY ===== */}
@@ -446,7 +430,7 @@ function AlertSystem({ userId }) {
         padding: '20px', borderRadius: '12px', marginBottom: '20px',
         textAlign: 'center', color: 'white'
       }}>
-        <h3 style={{ margin: '0 0 10px 0' }}>Emergency Helpline</h3>
+        <h3 style={{ margin: '0 0 10px 0' }}>{t('hosp_emergency')}</h3>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
           {[
             { l: '108 Ambulance', n: '108' },
@@ -472,10 +456,10 @@ function AlertSystem({ userId }) {
       }}>
         <div>
           <p style={{ margin: 0, fontWeight: 'bold' }}>
-            Auto Alert and Share: {autoShareEnabled ? 'ON' : 'OFF'}
+            Auto Alert: {autoShareEnabled ? 'ON' : 'OFF'}
           </p>
           <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: '#666' }}>
-            SAM/MAM par registered number pe SMS + nearest facility ko data share
+            SAM/MAM → SMS + Share
           </p>
         </div>
         <button onClick={() => setAutoShareEnabled(!autoShareEnabled)} style={{
@@ -487,7 +471,7 @@ function AlertSystem({ userId }) {
       {/* ===== SECTION 3: ALERTS ===== */}
       {alerts.length === 0 && (
         <div style={{ textAlign: 'center', padding: '30px', background: '#f8f9fa', borderRadius: '12px', marginBottom: '20px' }}>
-          <p style={{ fontSize: '16px', color: '#666' }}>Koi alert nahi. Pehle Data Entry mein assessment karein.</p>
+          <p style={{ fontSize: '16px', color: '#666' }}>{t('no_data')}</p>
         </div>
       )}
 
@@ -516,7 +500,7 @@ function AlertSystem({ userId }) {
                 <button onClick={() => window.open('tel:108', '_self')} style={{
                   padding: '8px 16px', background: '#dc3545', color: 'white',
                   border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px'
-                }}>Call 108</button>
+                }}>{t('hosp_call')} 108</button>
                 <button onClick={() => shareWhatsApp(smsNumber, latest)} style={{
                   padding: '8px 16px', background: '#25D366', color: 'white',
                   border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px'
@@ -524,7 +508,7 @@ function AlertSystem({ userId }) {
                 <button onClick={() => sendSMS(smsNumber, latest)} style={{
                   padding: '8px 16px', background: '#667eea', color: 'white',
                   border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px'
-                }}>Send SMS</button>
+                }}>SMS</button>
               </>
             )}
           </div>
@@ -536,7 +520,7 @@ function AlertSystem({ userId }) {
         background: 'white', padding: '20px', borderRadius: '12px',
         marginBottom: '20px', border: '2px solid #667eea'
       }}>
-        <h3 style={{ color: '#667eea', marginTop: 0 }}>SMS / WhatsApp Alert</h3>
+        <h3 style={{ color: '#667eea', marginTop: 0 }}>{t('alert_sms_title')}</h3>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
           <input type="tel" value={smsNumber} onChange={(e) => setSmsNumber(e.target.value)}
             placeholder="Phone number" style={{
@@ -554,7 +538,7 @@ function AlertSystem({ userId }) {
         </div>
         {userInfo?.phone && (
           <p style={{ fontSize: '12px', color: '#666', margin: 0 }}>
-            Registered Number: {userInfo.phone}
+            Registered: {userInfo.phone}
           </p>
         )}
       </div>
@@ -566,21 +550,18 @@ function AlertSystem({ userId }) {
           marginBottom: '20px', border: `2px solid ${latest.severity === 'SAM' ? '#dc3545' : '#ff9800'}`
         }}>
           <h3 style={{ color: latest.severity === 'SAM' ? '#dc3545' : '#ff9800', marginTop: 0 }}>
-            Diet Plan - {latest.severity}
+            {t('diet_title')} - {latest.severity}
           </h3>
 
-          {/* Urban Diet */}
           <div style={{ marginBottom: '20px' }}>
-            <h4 style={{ color: '#007bff', margin: '0 0 10px 0' }}>
-              {dietPlan.urban.titleHi}
-            </h4>
+            <h4 style={{ color: '#007bff', margin: '0 0 10px 0' }}>{dietPlan.urban.titleHi}</h4>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ background: '#007bff', color: 'white' }}>
-                    <th style={{ padding: '8px' }}>Time</th>
-                    <th style={{ padding: '8px' }}>Meal (Hindi)</th>
-                    <th style={{ padding: '8px' }}>Meal (English)</th>
+                    <th style={{ padding: '8px' }}>{t('diet_meal_time')}</th>
+                    <th style={{ padding: '8px' }}>Meal</th>
+                    <th style={{ padding: '8px' }}>English</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -595,25 +576,22 @@ function AlertSystem({ userId }) {
               </table>
             </div>
             <div style={{ background: '#e7f3ff', padding: '10px', borderRadius: '8px', marginTop: '10px' }}>
-              <p style={{ margin: 0, fontWeight: 'bold', fontSize: '13px', color: '#004085' }}>Tips:</p>
+              <p style={{ margin: 0, fontWeight: 'bold', fontSize: '13px', color: '#004085' }}>{t('diet_tips')}:</p>
               {dietPlan.urban.tips.map((tip, i) => (
                 <p key={i} style={{ margin: '3px 0', fontSize: '12px', color: '#004085' }}>- {tip}</p>
               ))}
             </div>
           </div>
 
-          {/* Rural Diet */}
           <div>
-            <h4 style={{ color: '#28a745', margin: '0 0 10px 0' }}>
-              {dietPlan.rural.titleHi}
-            </h4>
+            <h4 style={{ color: '#28a745', margin: '0 0 10px 0' }}>{dietPlan.rural.titleHi}</h4>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ background: '#28a745', color: 'white' }}>
-                    <th style={{ padding: '8px' }}>Time</th>
-                    <th style={{ padding: '8px' }}>Meal (Hindi)</th>
-                    <th style={{ padding: '8px' }}>Meal (English)</th>
+                    <th style={{ padding: '8px' }}>{t('diet_meal_time')}</th>
+                    <th style={{ padding: '8px' }}>Meal</th>
+                    <th style={{ padding: '8px' }}>English</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -628,23 +606,22 @@ function AlertSystem({ userId }) {
               </table>
             </div>
             <div style={{ background: '#e8f5e9', padding: '10px', borderRadius: '8px', marginTop: '10px' }}>
-              <p style={{ margin: 0, fontWeight: 'bold', fontSize: '13px', color: '#155724' }}>Tips:</p>
+              <p style={{ margin: 0, fontWeight: 'bold', fontSize: '13px', color: '#155724' }}>{t('diet_tips')}:</p>
               {dietPlan.rural.tips.map((tip, i) => (
                 <p key={i} style={{ margin: '3px 0', fontSize: '12px', color: '#155724' }}>- {tip}</p>
               ))}
             </div>
           </div>
 
-          {/* Share Diet Plan */}
           <div style={{ marginTop: '15px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button onClick={() => {
-              const msg = `*${latest.severity} Diet Plan*\n\n*Urban:*\n${dietPlan.urban.meals.map(m => `${m.time}: ${m.meal}`).join('\n')}\n\n*Rural:*\n${dietPlan.rural.meals.map(m => `${m.time}: ${m.meal}`).join('\n')}`;
+              const msg = `*${latest.severity} ${t('diet_title')}*\n\n*${t('diet_urban')}:*\n${dietPlan.urban.meals.map(m => `${m.time}: ${m.meal}`).join('\n')}\n\n*${t('diet_rural')}:*\n${dietPlan.rural.meals.map(m => `${m.time}: ${m.meal}`).join('\n')}`;
               const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
               window.open(url, '_blank');
             }} style={{
               padding: '10px 20px', background: '#25D366', color: 'white',
               border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'
-            }}>Share Diet Plan on WhatsApp</button>
+            }}>WhatsApp {t('diet_title')}</button>
           </div>
         </div>
       )}
@@ -654,9 +631,8 @@ function AlertSystem({ userId }) {
         background: 'white', padding: '20px', borderRadius: '12px',
         marginBottom: '20px', border: '2px solid #e91e63'
       }}>
-        <h3 style={{ color: '#e91e63', marginTop: 0 }}>Nearest Hospital and Anganwadi</h3>
+        <h3 style={{ color: '#e91e63', marginTop: 0 }}>{t('hosp_title')}</h3>
 
-        {/* Location Method */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
           <button onClick={() => { setSearchMethod('gps'); getLocation(); }} style={{
             flex: 1, padding: '12px', borderRadius: '8px', cursor: 'pointer',
@@ -671,21 +647,20 @@ function AlertSystem({ userId }) {
             background: searchMethod === 'manual' ? '#28a745' : 'white',
             color: searchMethod === 'manual' ? 'white' : '#333',
             fontWeight: 'bold', fontSize: '14px'
-          }}>Manual (Type)</button>
+          }}>{t('hosp_location')}</button>
         </div>
 
-        {/* Manual Search */}
         {searchMethod === 'manual' && (
           <div style={{ marginBottom: '15px' }}>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
               <input type="text" value={manualLocation} onChange={(e) => setManualLocation(e.target.value)}
                 onKeyPress={(e) => { if (e.key === 'Enter') searchByManualLocation(); }}
-                placeholder="City/Area/Village likhein..."
+                placeholder={t('hosp_location_placeholder')}
                 style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '2px solid #28a745', outline: 'none' }} />
               <button onClick={searchByManualLocation} style={{
                 padding: '10px 20px', background: '#28a745', color: 'white',
                 border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'
-              }}>Search</button>
+              }}>{t('hosp_search')}</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
               {popularCities.map((c, i) => (
@@ -700,14 +675,12 @@ function AlertSystem({ userId }) {
           </div>
         )}
 
-        {/* Location Info */}
         {locationName && (
           <div style={{ background: '#d4edda', padding: '10px', borderRadius: '8px', marginBottom: '15px' }}>
-            <p style={{ margin: 0, fontSize: '13px', color: '#155724' }}>Location: {locationName}</p>
+            <p style={{ margin: 0, fontSize: '13px', color: '#155724' }}>📍 {locationName}</p>
           </div>
         )}
 
-        {/* Radius */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap' }}>
           <label style={{ fontWeight: 'bold', fontSize: '13px' }}>Radius:</label>
           <select value={searchRadius} onChange={(e) => {
@@ -723,11 +696,10 @@ function AlertSystem({ userId }) {
             <button onClick={() => searchNearbyFacilities(userLocation.lat, userLocation.lng)} style={{
               padding: '6px 15px', background: '#667eea', color: 'white',
               border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'
-            }}>Refresh</button>
+            }}>{t('refresh')}</button>
           )}
         </div>
 
-        {/* Filter */}
         {nearbyFacilities.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '15px' }}>
             {[
@@ -753,10 +725,8 @@ function AlertSystem({ userId }) {
           </div>
         )}
 
-        {/* Loading */}
-        {facilityLoading && <p style={{ textAlign: 'center', color: '#667eea' }}>Searching...</p>}
+        {facilityLoading && <p style={{ textAlign: 'center', color: '#667eea' }}>⏳ {t('loading')}</p>}
 
-        {/* Map */}
         {userLocation && (
           <div style={{ borderRadius: '8px', overflow: 'hidden', marginBottom: '15px', border: '2px solid #667eea' }}>
             <iframe title="Map" width="100%" height="250" frameBorder="0"
@@ -765,7 +735,6 @@ function AlertSystem({ userId }) {
           </div>
         )}
 
-        {/* Facility List */}
         {getFilteredFacilities().map((f, i) => (
           <div key={f.id} style={{
             padding: '12px', borderRadius: '8px', marginBottom: '8px',
@@ -798,17 +767,16 @@ function AlertSystem({ userId }) {
                 <button onClick={(e) => { e.stopPropagation(); window.open(`tel:${f.phone}`, '_self'); }} style={{
                   padding: '6px 12px', background: '#dc3545', color: 'white',
                   border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold'
-                }}>Call</button>
+                }}>{t('hosp_call')}</button>
               )}
               <button onClick={(e) => { e.stopPropagation(); window.open(`https://www.google.com/maps/dir/${userLocation.lat},${userLocation.lng}/${f.lat},${f.lng}`, '_blank'); }} style={{
                 padding: '6px 12px', background: '#007bff', color: 'white',
                 border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold'
-              }}>Directions</button>
+              }}>{t('hosp_map')}</button>
             </div>
           </div>
         ))}
 
-        {/* Google Maps Quick */}
         {userLocation && (
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '15px' }}>
             {[
@@ -820,7 +788,7 @@ function AlertSystem({ userId }) {
               <button key={i} onClick={() => window.open(`https://www.google.com/maps/search/${item.q}/@${userLocation.lat},${userLocation.lng},13z`, '_blank')} style={{
                 padding: '8px 16px', background: '#667eea', color: 'white',
                 border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold'
-              }}>{item.l} on Maps</button>
+              }}>{item.l}</button>
             ))}
           </div>
         )}
@@ -832,16 +800,16 @@ function AlertSystem({ userId }) {
           background: 'white', padding: '20px', borderRadius: '12px',
           border: '1px solid #ddd'
         }}>
-          <h3 style={{ color: '#333', marginTop: 0 }}>Assessment History</h3>
+          <h3 style={{ color: '#333', marginTop: 0 }}>{t('dash_history')}</h3>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead>
                 <tr style={{ background: '#667eea', color: 'white' }}>
-                  <th style={{ padding: '8px' }}>Date</th>
-                  <th style={{ padding: '8px' }}>Severity</th>
+                  <th style={{ padding: '8px' }}>{t('dash_date')}</th>
+                  <th style={{ padding: '8px' }}>{t('dash_status')}</th>
                   <th style={{ padding: '8px' }}>MUAC</th>
-                  <th style={{ padding: '8px' }}>Weight</th>
-                  <th style={{ padding: '8px' }}>Height</th>
+                  <th style={{ padding: '8px' }}>{t('de_weight')}</th>
+                  <th style={{ padding: '8px' }}>{t('de_height')}</th>
                   <th style={{ padding: '8px' }}>Action</th>
                 </tr>
               </thead>

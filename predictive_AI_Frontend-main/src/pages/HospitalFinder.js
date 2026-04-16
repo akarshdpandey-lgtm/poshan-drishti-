@@ -1,865 +1,446 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 
-function HospitalFinder({ userId }) {
+function HospitalFinder({ userId, lang = 'en' }) {
   const [userLocation, setUserLocation] = useState(null);
-  const [hospitals, setHospitals] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [permissionStatus, setPermissionStatus] = useState('pending');
-  const [searchRadius, setSearchRadius] = useState(5000);
-  const [selectedHospital, setSelectedHospital] = useState(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const [locationName, setLocationName] = useState('');
   const [searchMethod, setSearchMethod] = useState('gps');
   const [manualLocation, setManualLocation] = useState('');
-  const [manualSearching, setManualSearching] = useState(false);
-  const [locationName, setLocationName] = useState('');
 
-  // GPS Permission लो और Location लो
-  const getLocation = useCallback(() => {
+  const txt = (hi, en) => lang === 'hi' ? hi : en;
+
+  // ========================================
+  // 📍 GPS LOCATION
+  // ========================================
+  const getGPSLocation = useCallback(() => {
     setLoading(true);
-    setError(null);
-    setSearchMethod('gps');
 
     if (!navigator.geolocation) {
-      setError('आपका browser GPS support नहीं करता। Manual location use करें।');
+      alert(txt('GPS नहीं है', 'No GPS'));
       setLoading(false);
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const loc = {
           lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy
+          lng: position.coords.longitude
         };
         setUserLocation(loc);
-        setPermissionStatus('granted');
-        setLoading(false);
-        // Reverse geocode - location ka naam lo
-        getLocationName(loc.lat, loc.lng);
-        // Hospitals search karo
-        searchNearbyHospitals(loc.lat, loc.lng, searchRadius);
-      },
-      (err) => {
-        setLoading(false);
-        switch (err.code) {
-          case err.PERMISSION_DENIED:
-            setPermissionStatus('denied');
-            setError('Location permission denied. Manual location use करें।');
-            break;
-          case err.POSITION_UNAVAILABLE:
-            setError('Location unavailable. GPS on करें या Manual location use करें।');
-            break;
-          case err.TIMEOUT:
-            setError('Location timeout. फिर से try करें या Manual location use करें।');
-            break;
-          default:
-            setError('Location error. Manual location use करें।');
+        
+        // Get location name
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.lat}&lon=${loc.lng}`,
+            { headers: { 'User-Agent': 'HealthApp/1.0' } }
+          );
+          const data = await res.json();
+          const city = data?.address?.city || data?.address?.town || data?.address?.village || data?.address?.district || '';
+          const state = data?.address?.state || '';
+          setLocationName(city ? `${city}, ${state}` : `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`);
+        } catch {
+          setLocationName(`${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`);
         }
+        
+        setLoading(false);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
-      }
+      () => {
+        alert(txt('Location नहीं मिला', 'Location not found'));
+        setLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []);
+  }, [lang]);
 
-  // Location का नाम लो (Reverse Geocoding)
-  const getLocationName = async (lat, lng) => {
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=hi,en`
-      );
-      const data = await response.json();
-      if (data && data.display_name) {
-        setLocationName(data.display_name);
-      }
-    } catch (err) {
-      console.error('Reverse geocoding error:', err);
+  // ========================================
+  // 🔍 SEARCH IN GOOGLE MAPS (100% WORKING)
+  // ========================================
+  const searchInGoogleMaps = (query) => {
+    let url;
+    if (userLocation) {
+      url = `https://www.google.com/maps/search/${encodeURIComponent(query)}/@${userLocation.lat},${userLocation.lng},14z`;
+    } else if (manualLocation.trim()) {
+      url = `https://www.google.com/maps/search/${encodeURIComponent(query + ' near ' + manualLocation)}`;
+    } else {
+      url = `https://www.google.com/maps/search/${encodeURIComponent(query + ' near me')}`;
     }
-  };
-
-  // Manual Location से search करो (Geocoding)
-  // Accepts optional cityName param for quick city buttons (avoids stale state)
-  const searchByManualLocation = async (cityName) => {
-    const searchTerm = cityName || manualLocation;
-    if (!searchTerm.trim()) {
-      setError('कृपया location का नाम लिखें');
-      return;
-    }
-
-    // Update the input field if called with a direct city name
-    if (cityName) {
-      setManualLocation(cityName);
-    }
-
-    setManualSearching(true);
-    setLoading(true);
-    setError(null);
-    setHospitals([]);
-    setSearchMethod('manual');
-
-    try {
-      // Nominatim API से location के coordinates लो (FREE)
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchTerm)}&limit=1&accept-language=hi,en`
-      );
-      const data = await response.json();
-
-      if (data && data.length > 0) {
-        const result = data[0];
-        const loc = {
-          lat: parseFloat(result.lat),
-          lng: parseFloat(result.lon),
-          accuracy: 0
-        };
-        setUserLocation(loc);
-        setLocationName(result.display_name);
-        setPermissionStatus('granted');
-        
-        // Ab hospitals search karo
-        await searchNearbyHospitals(loc.lat, loc.lng, searchRadius);
-      } else {
-        setError(`"${searchTerm}" location nahi mila. Sahi naam likhein. Example: Lucknow, Delhi, Mumbai`);
-        setLoading(false);
-      }
-    } catch (err) {
-      console.error('Geocoding error:', err);
-      setError('Location search mein error. Internet check karein.');
-      setLoading(false);
-    }
-
-    setManualSearching(false);
-  };
-
-  // Overpass API servers (fallback list)
-  const OVERPASS_SERVERS = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
-    'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
-  ];
-
-  // Try fetching from Overpass with fallback servers
-  const fetchFromOverpass = async (query) => {
-    let lastError = null;
-    for (const server of OVERPASS_SERVERS) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
-        
-        const response = await fetch(server, {
-          method: 'POST',
-          body: `data=${encodeURIComponent(query)}`,
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          throw new Error(`Server ${server} returned ${response.status}`);
-        }
-        return await response.json();
-      } catch (err) {
-        console.warn(`Overpass server failed: ${server}`, err.message);
-        lastError = err;
-      }
-    }
-    throw lastError || new Error('All Overpass servers failed');
-  };
-
-  // Nearby Hospitals खोजो (OpenStreetMap Overpass API - FREE)
-  // Accepts radius param to avoid stale closure
-  const searchNearbyHospitals = async (lat, lng, radius) => {
-    const radiusInMeters = radius || searchRadius;
-    setLoading(true);
-    setError(null);
-    try {
-      const query = `
-        [out:json][timeout:30];
-        (
-          node["amenity"="hospital"](around:${radiusInMeters},${lat},${lng});
-          way["amenity"="hospital"](around:${radiusInMeters},${lat},${lng});
-          node["amenity"="clinic"](around:${radiusInMeters},${lat},${lng});
-          way["amenity"="clinic"](around:${radiusInMeters},${lat},${lng});
-          node["amenity"="doctors"](around:${radiusInMeters},${lat},${lng});
-          node["healthcare"="hospital"](around:${radiusInMeters},${lat},${lng});
-          way["healthcare"="hospital"](around:${radiusInMeters},${lat},${lng});
-          node["healthcare"="clinic"](around:${radiusInMeters},${lat},${lng});
-        );
-        out body center;
-      `;
-
-      const data = await fetchFromOverpass(query);
-
-      if (data.elements && data.elements.length > 0) {
-        const hospitalList = data.elements
-          .map((element, index) => {
-            const hospLat = element.lat || element.center?.lat;
-            const hospLng = element.lon || element.center?.lon;
-            
-            if (!hospLat || !hospLng) return null;
-
-            const distance = calculateDistance(lat, lng, hospLat, hospLng);
-            
-            return {
-              id: element.id || index,
-              name: element.tags?.name || element.tags?.['name:hi'] || element.tags?.['name:en'] || 'Hospital/Clinic',
-              type: element.tags?.amenity || element.tags?.healthcare || 'hospital',
-              lat: hospLat,
-              lng: hospLng,
-              distance: distance,
-              address: element.tags?.['addr:full'] || element.tags?.['addr:street'] || '',
-              phone: element.tags?.phone || element.tags?.['contact:phone'] || '',
-              website: element.tags?.website || '',
-              emergency: element.tags?.emergency || '',
-              operator: element.tags?.operator || '',
-              beds: element.tags?.beds || '',
-              openingHours: element.tags?.opening_hours || '',
-              wheelchair: element.tags?.wheelchair || ''
-            };
-          })
-          .filter(h => h !== null)
-          .sort((a, b) => a.distance - b.distance);
-
-        setHospitals(hospitalList);
-        setError(null);
-      } else {
-        setHospitals([]);
-        setError('Is area mein koi hospital nahi mila. Radius badhakar try karein.');
-      }
-    } catch (err) {
-      console.error('Hospital search error:', err);
-      // Only show error if we don't already have results
-      if (hospitals.length === 0) {
-        setError('Hospital search mein error. Internet connection check karein.');
-      }
-    }
-    setLoading(false);
-  };
-
-  // 2 points ke beech distance (km)
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return Math.round(R * c * 100) / 100;
-  };
-
-  // Google Maps mein directions kholo
-  const openDirections = (hospital) => {
-    const url = `https://www.google.com/maps/dir/${userLocation.lat},${userLocation.lng}/${hospital.lat},${hospital.lng}`;
     window.open(url, '_blank');
   };
 
-  // Google Maps mein hospital location kholo
-  const openInMaps = (hospital) => {
-    const url = `https://www.google.com/maps/search/${encodeURIComponent(hospital.name)}/@${hospital.lat},${hospital.lng},15z`;
-    window.open(url, '_blank');
-  };
-
-  // Phone call karo
-  const callHospital = (phone) => {
-    window.open(`tel:${phone}`, '_self');
-  };
-
-  // Emergency number
-  const callEmergency = () => {
-    window.open('tel:108', '_self');
-  };
-
-  // Hospital type ka icon
-  const getTypeIcon = (type) => {
-    switch (type) {
-      case 'hospital': return '🏥';
-      case 'clinic': return '🏨';
-      case 'doctors': return '👨‍⚕️';
-      default: return '🏥';
+  // ========================================
+  // 📱 OPEN DIRECTIONS
+  // ========================================
+  const openDirectionsTo = (place) => {
+    if (userLocation) {
+      window.open(`https://www.google.com/maps/dir/${userLocation.lat},${userLocation.lng}/${encodeURIComponent(place)}`, '_blank');
+    } else {
+      window.open(`https://www.google.com/maps/dir//${encodeURIComponent(place)}`, '_blank');
     }
   };
 
-  // Hospital type ka label
-  const getTypeLabel = (type) => {
-    switch (type) {
-      case 'hospital': return 'Hospital';
-      case 'clinic': return 'Clinic';
-      case 'doctors': return 'Doctor';
-      default: return 'Healthcare';
-    }
-  };
+  const cities = ['Delhi', 'Mumbai', 'Lucknow', 'Patna', 'Jaipur', 'Kolkata', 'Chennai', 'Bangalore', 'Hyderabad', 'Bhopal', 'Ranchi', 'Varanasi'];
 
-  // Popular cities for quick search
-  const popularCities = [
-    'Delhi', 'Mumbai', 'Kolkata', 'Chennai', 'Bangalore',
-    'Hyderabad', 'Lucknow', 'Jaipur', 'Patna', 'Bhopal',
-    'Chandigarh', 'Ahmedabad', 'Pune', 'Ranchi', 'Raipur'
+  // ========================================
+  // 🏥 FACILITY CATEGORIES
+  // ========================================
+  const facilityCategories = [
+    {
+      icon: '🏥',
+      title: txt('अस्पताल', 'Hospitals'),
+      color: '#dc3545',
+      searches: [
+        { label: txt('सरकारी अस्पताल', 'Govt Hospital'), query: 'government hospital' },
+        { label: txt('प्राइवेट अस्पताल', 'Private Hospital'), query: 'private hospital' },
+        { label: txt('जिला अस्पताल', 'District Hospital'), query: 'district hospital' },
+        { label: txt('मेडिकल कॉलेज', 'Medical College'), query: 'medical college hospital' }
+      ]
+    },
+    {
+      icon: '👶',
+      title: txt('आंगनवाड़ी / ICDS', 'Anganwadi / ICDS'),
+      color: '#28a745',
+      searches: [
+        { label: txt('आंगनवाड़ी केंद्र', 'Anganwadi Centre'), query: 'anganwadi centre' },
+        { label: 'ICDS Centre', query: 'ICDS centre' },
+        { label: txt('बाल विकास केंद्र', 'Child Development'), query: 'child development centre' },
+        { label: txt('पोषण केंद्र', 'Nutrition Centre'), query: 'nutrition centre' }
+      ]
+    },
+    {
+      icon: '🏨',
+      title: txt('PHC / स्वास्थ्य केंद्र', 'PHC / Health Centre'),
+      color: '#17a2b8',
+      searches: [
+        { label: 'PHC', query: 'PHC primary health centre' },
+        { label: 'CHC', query: 'CHC community health centre' },
+        { label: txt('उप स्वास्थ्य केंद्र', 'Sub Health Centre'), query: 'sub health centre' },
+        { label: txt('स्वास्थ्य केंद्र', 'Health Centre'), query: 'government health centre' }
+      ]
+    },
+    {
+      icon: '🍼',
+      title: txt('NRC / पोषण पुनर्वास', 'NRC / Nutrition Rehab'),
+      color: '#fd7e14',
+      searches: [
+        { label: 'NRC', query: 'NRC nutrition rehabilitation centre' },
+        { label: txt('कुपोषण उपचार केंद्र', 'Malnutrition Treatment'), query: 'malnutrition treatment centre' },
+        { label: txt('पोषण पुनर्वास', 'Nutrition Rehab'), query: 'nutrition rehabilitation' },
+        { label: 'MTC', query: 'MTC malnutrition treatment centre' }
+      ]
+    },
+    {
+      icon: '💊',
+      title: txt('क्लिनिक / डॉक्टर', 'Clinic / Doctor'),
+      color: '#6f42c1',
+      searches: [
+        { label: txt('क्लिनिक', 'Clinic'), query: 'clinic' },
+        { label: txt('बाल रोग विशेषज्ञ', 'Pediatrician'), query: 'pediatrician child specialist' },
+        { label: txt('डिस्पेंसरी', 'Dispensary'), query: 'dispensary' },
+        { label: txt('डॉक्टर', 'Doctor'), query: 'doctor' }
+      ]
+    },
+    {
+      icon: '🤰',
+      title: txt('मातृत्व / प्रसूति', 'Maternity'),
+      color: '#e91e63',
+      searches: [
+        { label: txt('मातृत्व अस्पताल', 'Maternity Hospital'), query: 'maternity hospital' },
+        { label: txt('प्रसूति केंद्र', 'Delivery Centre'), query: 'delivery centre' },
+        { label: txt('महिला अस्पताल', 'Women Hospital'), query: 'women hospital' },
+        { label: txt('जननी सुरक्षा', 'Janani Suraksha'), query: 'janani suraksha hospital' }
+      ]
+    }
   ];
 
+  // ========================================
+  // 🎨 RENDER
+  // ========================================
   return (
-    <div style={{ padding: '10px' }}>
-      <h2 style={{ color: '#667eea', marginBottom: '20px' }}>Hospital Finder</h2>
+    <div style={{ padding: '15px', maxWidth: '900px', margin: '0 auto' }}>
 
-      {/* Emergency Button */}
+      {/* Title */}
+      <h2 style={{ color: '#667eea', textAlign: 'center', marginBottom: '20px' }}>
+        🏥 {txt('अस्पताल और आंगनवाड़ी खोजें', 'Find Hospitals & Anganwadi')}
+      </h2>
+
+      {/* ===== EMERGENCY ===== */}
       <div style={{
         background: 'linear-gradient(135deg, #dc3545, #c82333)',
-        padding: '20px',
-        borderRadius: '12px',
-        marginBottom: '20px',
-        textAlign: 'center',
-        color: 'white',
-        boxShadow: '0 4px 15px rgba(220, 53, 69, 0.4)'
+        padding: '20px', borderRadius: '12px', marginBottom: '20px',
+        textAlign: 'center', color: 'white'
       }}>
-        <h3 style={{ margin: '0 0 10px 0' }}>Emergency Helpline</h3>
+        <h3 style={{ margin: '0 0 15px 0' }}>🚨 {txt('आपातकालीन हेल्पलाइन', 'Emergency Helpline')}</h3>
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button onClick={callEmergency} style={{
-            padding: '12px 30px', fontSize: '18px', fontWeight: 'bold',
-            background: 'white', color: '#dc3545', border: 'none',
-            borderRadius: '8px', cursor: 'pointer'
-          }}>
-            108 - Ambulance
-          </button>
-          <button onClick={() => window.open('tel:112', '_self')} style={{
-            padding: '12px 30px', fontSize: '18px', fontWeight: 'bold',
-            background: 'white', color: '#dc3545', border: 'none',
-            borderRadius: '8px', cursor: 'pointer'
-          }}>
-            112 - Emergency
-          </button>
-          <button onClick={() => window.open('tel:102', '_self')} style={{
-            padding: '12px 30px', fontSize: '18px', fontWeight: 'bold',
-            background: 'white', color: '#dc3545', border: 'none',
-            borderRadius: '8px', cursor: 'pointer'
-          }}>
-            102 - Mother/Child
-          </button>
+          {[
+            { num: '108', label: txt('एम्बुलेंस', 'Ambulance') },
+            { num: '112', label: txt('इमरजेंसी', 'Emergency') },
+            { num: '102', label: txt('माँ/बच्चा', 'Mother/Child') },
+            { num: '1098', label: txt('बाल हेल्पलाइन', 'Child Helpline') }
+          ].map(item => (
+            <button key={item.num} onClick={() => window.open(`tel:${item.num}`, '_self')}
+              style={{
+                padding: '12px 20px', background: 'white', color: '#dc3545',
+                border: 'none', borderRadius: '8px', fontWeight: 'bold',
+                cursor: 'pointer', fontSize: '14px'
+              }}>
+              📞 {item.num} - {item.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ===== SEARCH METHOD SELECTION ===== */}
+      {/* ===== LOCATION SECTION ===== */}
       <div style={{
-        background: 'linear-gradient(135deg, #667eea10, #764ba210)',
-        padding: '25px',
-        borderRadius: '12px',
-        marginBottom: '20px',
-        border: '2px solid #667eea'
+        background: '#f8f9fa', padding: '20px', borderRadius: '12px',
+        marginBottom: '20px', border: '2px solid #667eea'
       }}>
-        <h3 style={{ color: '#667eea', marginTop: 0, marginBottom: '15px' }}>
-          Location Choose Karein
+        <h3 style={{ color: '#667eea', marginTop: 0 }}>
+          📍 {txt('अपनी Location सेट करें', 'Set Your Location')}
         </h3>
 
         {/* Method Toggle */}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-          <button 
-            onClick={() => setSearchMethod('gps')}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+          <button onClick={() => setSearchMethod('gps')}
             style={{
-              flex: 1,
-              padding: '15px',
-              borderRadius: '10px',
-              cursor: 'pointer',
-              border: searchMethod === 'gps' ? '3px solid #667eea' : '2px solid #ccc',
-              background: searchMethod === 'gps' ? '#667eea' : 'white',
+              flex: 1, padding: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
+              background: searchMethod === 'gps' ? '#007bff' : 'white',
               color: searchMethod === 'gps' ? 'white' : '#333',
-              fontWeight: 'bold',
-              fontSize: '15px',
-              transition: 'all 0.3s'
-            }}
-          >
-            GPS Location (Auto)
+              border: searchMethod === 'gps' ? 'none' : '2px solid #ddd'
+            }}>
+            📍 GPS (Auto)
           </button>
-          <button 
-            onClick={() => setSearchMethod('manual')}
+          <button onClick={() => setSearchMethod('manual')}
             style={{
-              flex: 1,
-              padding: '15px',
-              borderRadius: '10px',
-              cursor: 'pointer',
-              border: searchMethod === 'manual' ? '3px solid #28a745' : '2px solid #ccc',
+              flex: 1, padding: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
               background: searchMethod === 'manual' ? '#28a745' : 'white',
               color: searchMethod === 'manual' ? 'white' : '#333',
-              fontWeight: 'bold',
-              fontSize: '15px',
-              transition: 'all 0.3s'
-            }}
-          >
-            Manual Location (Type)
+              border: searchMethod === 'manual' ? 'none' : '2px solid #ddd'
+            }}>
+            ✏️ Manual
           </button>
         </div>
 
-        {/* GPS Option */}
+        {/* GPS */}
         {searchMethod === 'gps' && (
-          <div style={{
-            background: '#e7f3ff',
-            padding: '20px',
-            borderRadius: '10px',
-            border: '2px solid #007bff'
-          }}>
-            <p style={{ margin: '0 0 15px 0', color: '#004085', fontWeight: 'bold' }}>
-              GPS se apni current location detect karein
-            </p>
-            <button onClick={getLocation} style={{
-              padding: '12px 30px',
-              background: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              fontSize: '16px',
-              width: '100%'
-            }}>
-              {loading ? 'Detecting Location...' : 'Detect My Location (GPS)'}
+          <div>
+            <button onClick={getGPSLocation} disabled={loading}
+              style={{
+                width: '100%', padding: '15px',
+                background: loading ? '#ccc' : (userLocation ? '#28a745' : '#007bff'),
+                color: 'white', border: 'none', borderRadius: '8px',
+                fontWeight: 'bold', fontSize: '16px',
+                cursor: loading ? 'not-allowed' : 'pointer'
+              }}>
+              {loading ? '⏳ Detecting...' : (userLocation ? '✅ Location Set!' : txt('📍 Location Detect करें', '📍 Detect Location'))}
             </button>
-
-            {permissionStatus === 'granted' && userLocation && (
-              <div style={{ marginTop: '15px', background: '#d4edda', padding: '12px', borderRadius: '8px' }}>
-                <p style={{ margin: 0, color: '#155724', fontWeight: 'bold' }}>Location Found</p>
-                <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#155724' }}>
-                  {locationName || `Lat: ${userLocation.lat.toFixed(4)}, Lng: ${userLocation.lng.toFixed(4)}`}
-                </p>
-              </div>
-            )}
-
-            {permissionStatus === 'denied' && (
-              <div style={{ marginTop: '15px', background: '#f8d7da', padding: '12px', borderRadius: '8px' }}>
-                <p style={{ margin: 0, color: '#721c24', fontWeight: 'bold' }}>
-                  Location Permission Denied
-                </p>
-                <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#721c24' }}>
-                  Browser settings se allow karein ya Manual Location use karein
-                </p>
+            {locationName && (
+              <div style={{
+                marginTop: '12px', padding: '12px', background: '#d4edda',
+                borderRadius: '8px', color: '#155724', textAlign: 'center'
+              }}>
+                📍 <strong>{locationName}</strong>
               </div>
             )}
           </div>
         )}
 
-        {/* Manual Location Option */}
+        {/* Manual */}
         {searchMethod === 'manual' && (
-          <div style={{
-            background: '#e8f5e9',
-            padding: '20px',
-            borderRadius: '10px',
-            border: '2px solid #28a745'
-          }}>
-            <p style={{ margin: '0 0 15px 0', color: '#155724', fontWeight: 'bold' }}>
-              Location ka naam likhein (City, Area, Village, Pin Code)
-            </p>
-
-            {/* Search Input */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-              <input
-                type="text"
-                value={manualLocation}
-                onChange={(e) => setManualLocation(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') searchByManualLocation();
-                }}
-                placeholder="City/Area/Village ka naam likhein... (e.g. Lucknow, Varanasi)"
-                style={{
-                  flex: 1,
-                  padding: '14px',
-                  fontSize: '16px',
-                  borderRadius: '8px',
-                  border: '2px solid #28a745',
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
-              <button 
-                onClick={searchByManualLocation}
-                disabled={manualSearching || !manualLocation.trim()}
-                style={{
-                  padding: '14px 25px',
-                  background: manualSearching ? '#ccc' : '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: manualSearching ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {manualSearching ? 'Searching...' : 'Search'}
-              </button>
-            </div>
-
-            {/* Quick City Buttons */}
-            <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#155724', fontWeight: 'bold' }}>
-              Ya fir koi city select karein:
-            </p>
+          <div>
+            <input
+              type="text"
+              value={manualLocation}
+              onChange={(e) => setManualLocation(e.target.value)}
+              placeholder={txt('अपना शहर/गांव लिखें (जैसे: Lucknow)', 'Enter your city/village (e.g., Lucknow)')}
+              style={{
+                width: '100%', padding: '14px', borderRadius: '8px',
+                border: '2px solid #28a745', fontSize: '16px',
+                marginBottom: '12px', boxSizing: 'border-box'
+              }}
+            />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {popularCities.map((city, i) => (
-                <button 
-                  key={i}
-                  onClick={() => searchByManualLocation(city)}
+              {cities.map(city => (
+                <button key={city} onClick={() => setManualLocation(city)}
                   style={{
-                    padding: '8px 16px',
+                    padding: '8px 14px',
                     background: manualLocation === city ? '#28a745' : 'white',
                     color: manualLocation === city ? 'white' : '#333',
-                    border: '1px solid #28a745',
-                    borderRadius: '20px',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    transition: 'all 0.2s'
-                  }}
-                >
+                    border: '1px solid #28a745', borderRadius: '20px',
+                    cursor: 'pointer', fontSize: '13px'
+                  }}>
                   {city}
                 </button>
               ))}
             </div>
-
-            {/* Manual location result */}
-            {userLocation && searchMethod === 'manual' && locationName && (
-              <div style={{ marginTop: '15px', background: '#d4edda', padding: '12px', borderRadius: '8px' }}>
-                <p style={{ margin: 0, color: '#155724', fontWeight: 'bold' }}>Location Found</p>
-                <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#155724' }}>
-                  {locationName}
-                </p>
+            {manualLocation && (
+              <div style={{
+                marginTop: '12px', padding: '12px', background: '#d4edda',
+                borderRadius: '8px', color: '#155724', textAlign: 'center'
+              }}>
+                📍 {txt('Location:', 'Location:')} <strong>{manualLocation}</strong>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* Search Controls - Radius */}
-      {userLocation && (
-        <div style={{
-          background: '#f8f9fa',
-          padding: '15px',
-          borderRadius: '12px',
-          marginBottom: '20px',
-          border: '1px solid #ddd'
-        }}>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <label style={{ fontWeight: 'bold' }}>Search Radius:</label>
-            <select 
-              value={searchRadius} 
-              onChange={(e) => {
-                const newRadius = parseInt(e.target.value);
-                setSearchRadius(newRadius);
-                searchNearbyHospitals(userLocation.lat, userLocation.lng, newRadius);
-              }}
-              style={{ padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}
-            >
-              <option value={2000}>2 KM</option>
-              <option value={5000}>5 KM</option>
-              <option value={10000}>10 KM</option>
-              <option value={20000}>20 KM</option>
-              <option value={50000}>50 KM</option>
-            </select>
+      {/* ===== FACILITY SEARCH CARDS ===== */}
+      <div style={{ marginBottom: '20px' }}>
+        <h3 style={{ color: '#333', marginBottom: '15px' }}>
+          🔍 {txt('क्या खोजना है चुनें', 'Choose What to Search')}
+        </h3>
 
-            <button onClick={() => searchNearbyHospitals(userLocation.lat, userLocation.lng, searchRadius)} style={{
-              padding: '8px 20px', background: '#667eea', color: 'white',
-              border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'
-            }}>
-              Search Again
-            </button>
-
-            <button onClick={() => {
-              const url = `https://www.google.com/maps/search/hospitals+near+me/@${userLocation.lat},${userLocation.lng},13z`;
-              window.open(url, '_blank');
-            }} style={{
-              padding: '8px 20px', background: '#28a745', color: 'white',
-              border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'
-            }}>
-              Open Google Maps
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Map View */}
-      {userLocation && (
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          marginBottom: '20px',
-          overflow: 'hidden',
-          border: '2px solid #667eea',
-          boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{ 
-            background: '#667eea', 
-            padding: '10px 15px', 
-            color: 'white', 
-            fontWeight: 'bold',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
+        {facilityCategories.map((category, idx) => (
+          <div key={idx} style={{
+            background: 'white', borderRadius: '12px', marginBottom: '15px',
+            border: `3px solid ${category.color}`, overflow: 'hidden',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
           }}>
-            <span>Map View ({hospitals.length} hospitals found)</span>
-          </div>
-          <iframe
-            title="Hospital Map"
-            width="100%"
-            height="400"
-            frameBorder="0"
-            style={{ border: 0 }}
-            src={`https://www.openstreetmap.org/export/embed.html?bbox=${userLocation.lng - 0.05},${userLocation.lat - 0.05},${userLocation.lng + 0.05},${userLocation.lat + 0.05}&layer=mapnik&marker=${userLocation.lat},${userLocation.lng}`}
-            onLoad={() => setMapLoaded(true)}
-          />
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading && (
-        <div style={{
-          textAlign: 'center', padding: '40px',
-          background: '#f8f9fa', borderRadius: '12px', marginBottom: '20px'
-        }}>
-          <p style={{ fontSize: '18px', color: '#667eea' }}>Searching hospitals...</p>
-          <p style={{ fontSize: '14px', color: '#666' }}>Please wait...</p>
-        </div>
-      )}
-
-      {/* Error - only show if no hospitals found */}
-      {error && hospitals.length === 0 && (
-        <div style={{
-          background: '#f8d7da', padding: '15px', borderRadius: '12px',
-          marginBottom: '20px', border: '2px solid #dc3545', color: '#721c24'
-        }}>
-          <p style={{ margin: 0, fontWeight: 'bold' }}>{error}</p>
-        </div>
-      )}
-
-      {/* Hospital Results */}
-      {hospitals.length > 0 && (
-        <div>
-          <h3 style={{ color: '#333', marginBottom: '15px' }}>
-            {hospitals.length} Hospitals/Clinics Found (within {searchRadius / 1000} km)
-          </h3>
-
-          {hospitals.map((hospital, index) => (
-            <div key={hospital.id} style={{
-              background: selectedHospital === hospital.id ? '#e7f3ff' : 'white',
-              padding: '20px',
-              borderRadius: '12px',
-              marginBottom: '15px',
-              border: selectedHospital === hospital.id ? '3px solid #007bff' : '2px solid #e0e0e0',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              cursor: 'pointer',
-              transition: 'all 0.3s'
-            }}
-            onClick={() => setSelectedHospital(hospital.id === selectedHospital ? null : hospital.id)}
-            >
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
-                    <span style={{ fontSize: '24px' }}>{getTypeIcon(hospital.type)}</span>
-                    <h4 style={{ margin: 0, color: '#333', fontSize: '16px' }}>
-                      {index + 1}. {hospital.name}
-                    </h4>
-                  </div>
-                  <span style={{
-                    display: 'inline-block',
-                    padding: '2px 10px',
-                    background: hospital.type === 'hospital' ? '#667eea20' : '#28a74520',
-                    color: hospital.type === 'hospital' ? '#667eea' : '#28a745',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    fontWeight: 'bold'
-                  }}>
-                    {getTypeLabel(hospital.type)}
-                  </span>
-                </div>
-
-                {/* Distance */}
-                <div style={{
-                  background: hospital.distance < 2 ? '#d4edda' : hospital.distance < 5 ? '#fff3cd' : '#f8d7da',
-                  padding: '8px 15px',
-                  borderRadius: '8px',
-                  textAlign: 'center',
-                  minWidth: '80px'
-                }}>
-                  <p style={{ 
-                    margin: 0, fontSize: '18px', fontWeight: 'bold',
-                    color: hospital.distance < 2 ? '#155724' : hospital.distance < 5 ? '#856404' : '#721c24'
-                  }}>
-                    {hospital.distance} km
-                  </p>
-                  <p style={{ margin: 0, fontSize: '10px', color: '#666' }}>distance</p>
-                </div>
-              </div>
-
-              {/* Details */}
-              {hospital.address && (
-                <p style={{ margin: '5px 0', fontSize: '14px', color: '#666' }}>
-                  Address: {hospital.address}
-                </p>
-              )}
-              {hospital.operator && (
-                <p style={{ margin: '5px 0', fontSize: '14px', color: '#666' }}>
-                  Operator: {hospital.operator}
-                </p>
-              )}
-              {hospital.beds && (
-                <p style={{ margin: '5px 0', fontSize: '14px', color: '#666' }}>
-                  Beds: {hospital.beds}
-                </p>
-              )}
-              {hospital.openingHours && (
-                <p style={{ margin: '5px 0', fontSize: '14px', color: '#666' }}>
-                  Hours: {hospital.openingHours}
-                </p>
-              )}
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '15px', flexWrap: 'wrap' }}>
-                <button onClick={(e) => {
-                  e.stopPropagation();
-                  openDirections(hospital);
-                }} style={{
-                  padding: '10px 20px', background: '#007bff', color: 'white',
-                  border: 'none', borderRadius: '6px', cursor: 'pointer',
-                  fontWeight: 'bold', fontSize: '13px'
-                }}>
-                  Get Directions
-                </button>
-
-                <button onClick={(e) => {
-                  e.stopPropagation();
-                  openInMaps(hospital);
-                }} style={{
-                  padding: '10px 20px', background: '#28a745', color: 'white',
-                  border: 'none', borderRadius: '6px', cursor: 'pointer',
-                  fontWeight: 'bold', fontSize: '13px'
-                }}>
-                  View on Map
-                </button>
-
-                {hospital.phone && (
-                  <button onClick={(e) => {
-                    e.stopPropagation();
-                    callHospital(hospital.phone);
-                  }} style={{
-                    padding: '10px 20px', background: '#dc3545', color: 'white',
-                    border: 'none', borderRadius: '6px', cursor: 'pointer',
-                    fontWeight: 'bold', fontSize: '13px'
-                  }}>
-                    Call: {hospital.phone}
-                  </button>
-                )}
-
-                {hospital.website && (
-                  <button onClick={(e) => {
-                    e.stopPropagation();
-                    window.open(hospital.website, '_blank');
-                  }} style={{
-                    padding: '10px 20px', background: '#6f42c1', color: 'white',
-                    border: 'none', borderRadius: '6px', cursor: 'pointer',
-                    fontWeight: 'bold', fontSize: '13px'
-                  }}>
-                    Website
-                  </button>
-                )}
-              </div>
+            {/* Category Header */}
+            <div style={{
+              background: category.color, padding: '12px 15px',
+              color: 'white', fontWeight: 'bold', fontSize: '16px'
+            }}>
+              {category.icon} {category.title}
             </div>
-          ))}
-        </div>
-      )}
 
-      {/* No Results */}
-      {!loading && hospitals.length === 0 && userLocation && !error && (
-        <div style={{
-          textAlign: 'center', padding: '40px',
-          background: '#fff3cd', borderRadius: '12px',
-          border: '2px solid #ffc107'
-        }}>
-          <p style={{ fontSize: '18px', color: '#856404', fontWeight: 'bold' }}>
-            Koi hospital nahi mila
-          </p>
-          <p style={{ fontSize: '14px', color: '#856404' }}>
-            Radius badhakar try karein
-          </p>
-        </div>
-      )}
-
-      {/* NRC Centers */}
-      <div style={{
-        background: 'linear-gradient(135deg, #667eea20, #764ba220)',
-        padding: '20px',
-        borderRadius: '12px',
-        marginTop: '20px',
-        border: '2px solid #667eea'
-      }}>
-        <h3 style={{ color: '#667eea', marginTop: 0 }}>NRC / Anganwadi / PHC Search</h3>
-        <p style={{ fontSize: '14px', color: '#333', marginBottom: '15px' }}>
-          SAM ke liye NRC, Anganwadi ya PHC search karein:
-        </p>
-        
-        {userLocation && (
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button onClick={() => {
-              const url = `https://www.google.com/maps/search/NRC+nutrition+rehabilitation+centre/@${userLocation.lat},${userLocation.lng},12z`;
-              window.open(url, '_blank');
-            }} style={{
-              padding: '12px 25px', background: '#667eea', color: 'white',
-              border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'
-            }}>
-              Search NRC
-            </button>
-
-            <button onClick={() => {
-              const url = `https://www.google.com/maps/search/anganwadi+centre/@${userLocation.lat},${userLocation.lng},12z`;
-              window.open(url, '_blank');
-            }} style={{
-              padding: '12px 25px', background: '#28a745', color: 'white',
-              border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'
-            }}>
-              Search Anganwadi
-            </button>
-
-            <button onClick={() => {
-              const url = `https://www.google.com/maps/search/PHC+primary+health+centre/@${userLocation.lat},${userLocation.lng},12z`;
-              window.open(url, '_blank');
-            }} style={{
-              padding: '12px 25px', background: '#fd7e14', color: 'white',
-              border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'
-            }}>
-              Search PHC
-            </button>
+            {/* Search Buttons */}
+            <div style={{ padding: '15px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+              {category.searches.map((search, sIdx) => (
+                <button key={sIdx} onClick={() => searchInGoogleMaps(search.query)}
+                  style={{
+                    padding: '10px 18px', background: `${category.color}15`,
+                    color: category.color, border: `2px solid ${category.color}`,
+                    borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
+                    fontSize: '13px', transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => {
+                    e.target.style.background = category.color;
+                    e.target.style.color = 'white';
+                  }}
+                  onMouseOut={(e) => {
+                    e.target.style.background = `${category.color}15`;
+                    e.target.style.color = category.color;
+                  }}
+                >
+                  🔍 {search.label}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+        ))}
       </div>
 
-      {/* Government Helplines */}
+      {/* ===== QUICK DIRECTIONS ===== */}
       <div style={{
-        background: 'white',
-        padding: '20px',
-        borderRadius: '12px',
-        marginTop: '20px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        border: '1px solid #e0e0e0'
+        background: 'linear-gradient(135deg, #667eea, #764ba2)',
+        padding: '20px', borderRadius: '12px', marginBottom: '20px', color: 'white'
       }}>
-        <h3 style={{ color: '#333', marginTop: 0 }}>Government Helplines</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+        <h3 style={{ margin: '0 0 15px 0' }}>
+          🚗 {txt('सीधे रास्ता पाएं', 'Get Direct Directions')}
+        </h3>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
           {[
-            { name: 'Ambulance', number: '108', color: '#dc3545' },
-            { name: 'Emergency', number: '112', color: '#dc3545' },
-            { name: 'Mother/Child', number: '102', color: '#e91e63' },
-            { name: 'Health Helpline', number: '104', color: '#007bff' },
-            { name: 'Child Helpline', number: '1098', color: '#28a745' },
-            { name: 'Women Helpline', number: '181', color: '#6f42c1' }
-          ].map((helpline, i) => (
-            <button key={i} onClick={() => window.open(`tel:${helpline.number}`, '_self')} style={{
-              padding: '15px',
-              background: `${helpline.color}10`,
-              border: `2px solid ${helpline.color}`,
-              borderRadius: '8px',
-              cursor: 'pointer',
-              textAlign: 'center'
+            { icon: '🏥', label: txt('नजदीकी अस्पताल', 'Nearest Hospital'), query: 'nearest hospital' },
+            { icon: '👶', label: txt('नजदीकी आंगनवाड़ी', 'Nearest Anganwadi'), query: 'nearest anganwadi' },
+            { icon: '🏨', label: txt('नजदीकी PHC', 'Nearest PHC'), query: 'nearest PHC' },
+            { icon: '💊', label: txt('नजदीकी मेडिकल', 'Nearest Medical'), query: 'nearest medical store' }
+          ].map((item, idx) => (
+            <button key={idx} onClick={() => openDirectionsTo(item.query)}
+              style={{
+                padding: '12px 20px', background: 'white', color: '#667eea',
+                border: 'none', borderRadius: '8px', cursor: 'pointer',
+                fontWeight: 'bold', fontSize: '14px'
+              }}>
+              {item.icon} {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ===== MAP ===== */}
+      {(userLocation || manualLocation) && (
+        <div style={{
+          borderRadius: '12px', overflow: 'hidden',
+          marginBottom: '20px', border: '2px solid #667eea'
+        }}>
+          <div style={{
+            background: '#667eea', padding: '10px 15px',
+            color: 'white', fontWeight: 'bold'
+          }}>
+            🗺️ {txt('आपकी Location', 'Your Location')}
+          </div>
+          {userLocation ? (
+            <iframe
+              title="Map"
+              width="100%"
+              height="250"
+              frameBorder="0"
+              src={`https://www.openstreetmap.org/export/embed.html?bbox=${userLocation.lng - 0.02},${userLocation.lat - 0.02},${userLocation.lng + 0.02},${userLocation.lat + 0.02}&layer=mapnik&marker=${userLocation.lat},${userLocation.lng}`}
+            />
+          ) : (
+            <div style={{
+              padding: '40px', textAlign: 'center', background: '#f8f9fa'
             }}>
-              <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', color: helpline.color, fontSize: '20px' }}>
-                {helpline.number}
-              </p>
-              <p style={{ margin: 0, fontSize: '13px', color: '#333' }}>{helpline.name}</p>
+              📍 {manualLocation}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== HOW IT WORKS ===== */}
+      <div style={{
+        background: '#e8f5e9', padding: '20px', borderRadius: '12px',
+        marginBottom: '20px', border: '2px solid #4caf50'
+      }}>
+        <h3 style={{ color: '#2e7d32', marginTop: 0 }}>
+          ℹ️ {txt('कैसे काम करता है?', 'How it works?')}
+        </h3>
+        <div style={{ color: '#333', fontSize: '14px', lineHeight: '1.8' }}>
+          <p style={{ margin: '8px 0' }}>
+            1️⃣ {txt('पहले अपनी Location सेट करें (GPS या Manual)', 'First set your location (GPS or Manual)')}
+          </p>
+          <p style={{ margin: '8px 0' }}>
+            2️⃣ {txt('फिर जो खोजना है उस पर Click करें', 'Then click on what you want to search')}
+          </p>
+          <p style={{ margin: '8px 0' }}>
+            3️⃣ {txt('Google Maps में सारे नजदीकी results दिखेंगे', 'All nearby results will show in Google Maps')}
+          </p>
+          <p style={{ margin: '8px 0' }}>
+            4️⃣ {txt('वहां से directions और contact details मिलेंगे', 'Get directions and contact details from there')}
+          </p>
+        </div>
+      </div>
+
+      {/* ===== GOVERNMENT HELPLINES ===== */}
+      <div style={{
+        background: 'white', padding: '20px', borderRadius: '12px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+      }}>
+        <h3 style={{ marginTop: 0 }}>📞 {txt('सरकारी हेल्पलाइन', 'Government Helplines')}</h3>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+          gap: '10px'
+        }}>
+          {[
+            { num: '108', name: txt('एम्बुलेंस', 'Ambulance'), color: '#dc3545' },
+            { num: '112', name: txt('इमरजेंसी', 'Emergency'), color: '#e91e63' },
+            { num: '102', name: txt('माँ/बच्चा', 'Mother/Child'), color: '#9c27b0' },
+            { num: '104', name: txt('स्वास्थ्य', 'Health'), color: '#2196f3' },
+            { num: '1098', name: txt('बाल हेल्पलाइन', 'Child Helpline'), color: '#4caf50' },
+            { num: '181', name: txt('महिला', 'Women'), color: '#ff9800' },
+            { num: '1800-180-1104', name: txt('पोषण', 'Nutrition'), color: '#795548' }
+          ].map(h => (
+            <button key={h.num} onClick={() => window.open(`tel:${h.num}`, '_self')}
+              style={{
+                padding: '15px 10px', background: `${h.color}15`,
+                border: `2px solid ${h.color}`, borderRadius: '8px',
+                cursor: 'pointer', textAlign: 'center'
+              }}>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: h.color }}>{h.num}</div>
+              <div style={{ fontSize: '11px', color: '#333', marginTop: '5px' }}>{h.name}</div>
             </button>
           ))}
         </div>
