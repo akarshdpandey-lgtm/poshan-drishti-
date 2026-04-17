@@ -576,4 +576,6 @@ if __name__ == '__main__':
     print("   • POST /api/hidden-hunger")
     print("   • POST /api/womb-to-world")
     print("="*60 + "\n")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
