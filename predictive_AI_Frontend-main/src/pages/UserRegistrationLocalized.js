@@ -27,7 +27,7 @@ function UserRegistrationLocalized({ onSuccess }) {
     setError(null);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/user/register', formData);
+      const response = await axios.post('https://poshandrishti-backend.onrender.com/api/user/register', formData);
       onSuccess(response.data.user_id);
       alert(lang === 'hi' ? 'रजिस्ट्रेशन सफल!' : 'Registration successful!');
     } catch (err) {

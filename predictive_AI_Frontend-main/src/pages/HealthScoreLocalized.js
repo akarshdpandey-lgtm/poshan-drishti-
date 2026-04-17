@@ -9,7 +9,7 @@ function HealthScoreLocalized({ userId }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/assessment/all/${userId}`);
+      const res = await axios.get(`https://poshandrishti-backend.onrender.com/api/assessment/all/${userId}`);
       setAssessments(res.data.assessments || []);
     } catch (err) {
       setAssessments([]);

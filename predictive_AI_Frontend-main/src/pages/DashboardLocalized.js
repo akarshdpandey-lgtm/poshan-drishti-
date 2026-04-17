@@ -11,7 +11,7 @@ function DashboardLocalized({ userId }) {
   const fetchAssessments = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`http://localhost:5000/api/assessment/all/${userId}`);
+      const res = await axios.get(`https://poshandrishti-backend.onrender.com/api/assessment/all/${userId}`);
       if (res.data.assessments && res.data.assessments.length > 0) {
         setAssessments(res.data.assessments);
         setError(null);
