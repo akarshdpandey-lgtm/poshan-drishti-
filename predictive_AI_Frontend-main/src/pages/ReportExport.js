@@ -11,8 +11,8 @@ function ReportExport({ userId }) {
   const fetchData = useCallback(async () => {
     try {
       const [assessRes, userRes] = await Promise.all([
-        axios.get(`http://localhost:5000/api/assessment/all/${userId}`),
-        axios.get(`http://localhost:5000/api/user/${userId}`)
+        axios.get(`https://poshandrishti-backend.onrender.com/api/assessment/all/${userId}`),
+        axios.get(`https://poshandrishti-backend.onrender.com/api/user/${userId}`)
       ]);
       setAssessments(assessRes.data.assessments || []);
       setUserData(userRes.data);

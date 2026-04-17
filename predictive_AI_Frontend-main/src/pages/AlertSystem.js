@@ -31,7 +31,7 @@ function AlertSystem({ userId }) {
 
   const loadUserInfo = async () => {
     try {
-      const response = await axios.get(`http://localhost:5000/api/user/${userId}`);
+      const response = await axios.get(`https://poshandrishti-backend.onrender.com/api/user/${userId}`);
       setUserInfo(response.data);
       if (response.data.phone) {
         setSmsNumber(response.data.phone);
@@ -44,7 +44,7 @@ function AlertSystem({ userId }) {
   const loadAssessments = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(`http://localhost:5000/api/assessment/all/${userId}`);
+      const response = await axios.get(`https://poshandrishti-backend.onrender.com/api/assessment/all/${userId}`);
       if (response.data.success) {
         const data = response.data.assessments;
         setAssessments(data);
