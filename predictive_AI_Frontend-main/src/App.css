@@ -138,7 +138,7 @@ h1, h2, h3, h4, h5, h6 {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  outline: none !important;
+  outline: 0 !important;
   box-shadow: none !important;
   -webkit-tap-highlight-color: transparent !important;
   -webkit-appearance: none !important;
@@ -147,22 +147,38 @@ h1, h2, h3, h4, h5, h6 {
   -webkit-user-select: none !important;
   -moz-user-select: none !important;
   -ms-user-select: none !important;
-  transition: all 0.2s ease !important;
+  transition: none !important;
   filter: none !important;
   backdrop-filter: none !important;
+  -webkit-focus-ring-color: transparent !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  margin: 0 !important;
+}
+
+.menu-button * {
+  pointer-events: none !important;
 }
 
 .menu-button:active,
 .menu-button:focus,
 .menu-button:focus-visible,
+.menu-button:focus-within,
 .menu-button:visited,
 .menu-button:hover {
-  outline: none !important;
+  outline: 0 !important;
   box-shadow: none !important;
-  background: rgba(255, 255, 255, 0.05) !important;
+  background: transparent !important;
   filter: none !important;
   backdrop-filter: none !important;
   border-color: rgba(255,255,255,0.4) !important;
+  color: white !important;
+}
+
+.menu-button::-moz-focus-inner {
+  border: none !important;
+  padding: 0 !important;
 }
 
 /* Drawer Menu */
