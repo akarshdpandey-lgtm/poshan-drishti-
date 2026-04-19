@@ -15,7 +15,6 @@ import FloatingChatbot from './pages/FloatingChatbot';
 import HiddenHunger from './pages/HiddenHunger';
 import WombToWorld from './pages/WombToWorld';
 
-// ✅ BACKEND URL SETUP
 const API_URL = process.env.REACT_APP_API_URL || 'https://poshan-drishti-8asu.onrender.com';
 
 function App() {
@@ -94,7 +93,6 @@ function App() {
 
   return (
     <div className="App">
-      {/* HEADER */}
       <header className="app-header-container">
         <div className="app-header-inner">
           <div className="app-logo" onClick={() => handlePageChange('home')}>
@@ -185,7 +183,6 @@ function App() {
         />
       )}
 
-      {/* MAIN */}
       <main className="app-main" style={{ opacity: pageLoading ? 0.6 : 1, transition: 'opacity 0.3s' }}>
         {!userId ? (
           <UserRegistration onSuccess={handleUserRegistered} apiUrl={API_URL} />
