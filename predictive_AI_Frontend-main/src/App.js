@@ -15,6 +15,9 @@ import FloatingChatbot from './pages/FloatingChatbot';
 import HiddenHunger from './pages/HiddenHunger';
 import WombToWorld from './pages/WombToWorld';
 
+// ✅ BACKEND URL SETUP
+const API_URL = process.env.REACT_APP_API_URL || 'https://poshan-drishti-8asu.onrender.com';
+
 function App() {
   const [userId, setUserId] = useState(localStorage.getItem('userId') || null);
   const [currentPage, setCurrentPage] = useState('home');
@@ -185,7 +188,7 @@ function App() {
       {/* MAIN */}
       <main className="app-main" style={{ opacity: pageLoading ? 0.6 : 1, transition: 'opacity 0.3s' }}>
         {!userId ? (
-          <UserRegistration onSuccess={handleUserRegistered} />
+          <UserRegistration onSuccess={handleUserRegistered} apiUrl={API_URL} />
         ) : (
           <>
             <nav className="nav-buttons-container">
@@ -269,16 +272,16 @@ function App() {
                 </div>
               )}
 
-              {currentPage === 'data-entry' && <div className="premium-form-container"><DataEntry userId={userId} lang={lang} /></div>}
-              {currentPage === 'scan' && <div className="premium-form-container"><ScanPage userId={userId} lang={lang} /></div>}
-              {currentPage === 'dashboard' && <div className="premium-form-container"><Dashboard userId={userId} lang={lang} /></div>}
-              {currentPage === 'health-score' && <div className="premium-form-container"><HealthScore userId={userId} lang={lang} /></div>}
-              {currentPage === 'hidden-hunger' && <div className="premium-form-container"><HiddenHunger userId={userId} lang={lang} /></div>}
-              {currentPage === 'womb-to-world' && <div className="premium-form-container"><WombToWorld userId={userId} lang={lang} /></div>}
-              {currentPage === 'diet-plan' && <div className="premium-form-container"><DietPlan userId={userId} lang={lang} /></div>}
-              {currentPage === 'hospital' && <div className="premium-form-container"><HospitalFinder userId={userId} lang={lang} /></div>}
-              {currentPage === 'alerts' && <div className="premium-form-container"><AlertSystem userId={userId} lang={lang} /></div>}
-              {currentPage === 'report' && <div className="premium-form-container"><ReportExport userId={userId} lang={lang} /></div>}
+              {currentPage === 'data-entry' && <div className="premium-form-container"><DataEntry userId={userId} lang={lang} apiUrl={API_URL} /></div>}
+              {currentPage === 'scan' && <div className="premium-form-container"><ScanPage userId={userId} lang={lang} apiUrl={API_URL} /></div>}
+              {currentPage === 'dashboard' && <div className="premium-form-container"><Dashboard userId={userId} lang={lang} apiUrl={API_URL} /></div>}
+              {currentPage === 'health-score' && <div className="premium-form-container"><HealthScore userId={userId} lang={lang} apiUrl={API_URL} /></div>}
+              {currentPage === 'hidden-hunger' && <div className="premium-form-container"><HiddenHunger userId={userId} lang={lang} apiUrl={API_URL} /></div>}
+              {currentPage === 'womb-to-world' && <div className="premium-form-container"><WombToWorld userId={userId} lang={lang} apiUrl={API_URL} /></div>}
+              {currentPage === 'diet-plan' && <div className="premium-form-container"><DietPlan userId={userId} lang={lang} apiUrl={API_URL} /></div>}
+              {currentPage === 'hospital' && <div className="premium-form-container"><HospitalFinder userId={userId} lang={lang} apiUrl={API_URL} /></div>}
+              {currentPage === 'alerts' && <div className="premium-form-container"><AlertSystem userId={userId} lang={lang} apiUrl={API_URL} /></div>}
+              {currentPage === 'report' && <div className="premium-form-container"><ReportExport userId={userId} lang={lang} apiUrl={API_URL} /></div>}
             </div>
           </>
         )}
@@ -290,7 +293,7 @@ function App() {
         <p className="made-with">Made with ❤️ for Child Nutrition</p>
       </footer>
 
-      {userId && <FloatingChatbot />}
+      {userId && <FloatingChatbot apiUrl={API_URL} />}
     </div>
   );
 }
